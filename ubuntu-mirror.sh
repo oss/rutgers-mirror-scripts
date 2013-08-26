@@ -4,15 +4,15 @@
 
 ## Where do we want to have our files
 SYNC_HOME="/limbus/centos/ubuntu"
-log=$SYNC_HOME/logs/sync.log
+log="/limbus/centos/logs/ubuntu_sync.log"
 UPDATE_FILE=/limbus/centos/status/UBUNTU.LAST_UPDATE
 
 
 #email to report on out of date
 EMAIL="oss@oss.rutgers.edu"
 ## Setup the server to mirror
-remote=rsync://mirrors.rit.edu/ubuntu/
-#remote=rsync://mirrors.rit.edu/ubuntu/
+#remote=rsync://archive.ubuntu.com/ubuntu
+remote=rsync://mirrors.rit.edu/ubuntu
 
 
 ## Setup the local directory / Our mirror
@@ -44,7 +44,8 @@ while [[ "$complete" != "true" ]]; do
 	        #if our rsync failed, log it and email us
 
 		logger -p cron.err -t $0 `tail -n 5 $log` #write log to syslog on failure
-		OUTOFDATE=`find /mirror/status -mtime -1 -name 'ARCHLINUX*' | wc -l`
+		# Mon Aug 5 2013: This used to search for "ARCHLINUX" instead of "UBUNTU"
+		OUTOFDATE=`find /mirror/status -mtime -1 -name 'UBUNTU*' | wc -l`
 		if [ "$OUTOFDATE" -eq 0 ]
 		then
 			echo "sync out of date\n";
