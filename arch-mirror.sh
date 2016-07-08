@@ -28,8 +28,11 @@ SYNC_REPO=()
 # Set the rsync server to use
 # Only official public mirrors are allowed to use rsync.archlinux.org
 # SYNC_SERVER=rsync.archlinux.org::ftp
-#SYNC_SERVER=distro.ibiblio.org::distros/archlinux
-SYNC_SERVER=rsync://mirror.rit.edu/archlinux/
+# SYNC_SERVER=distro.ibiblio.org::distros/archlinux
+# leaseweb is a tier 1 server, which is what we should be syncing from since we are tier 2.
+# SYNC_SERVER=rsync://mirror.us.leaseweb.net/archlinux/
+# localmsp is the most up to date server in the US
+SYNC_SERVER=rsync://rsync.localmsp.org/arch/
 
 # Old logs look like this:
 #	  This example will output something like this: sync_20070201-8.log
@@ -44,81 +47,84 @@ if [ ! -d $SYNC_HOME ]; then
   exit 1
 fi
 
-[ -f $SYNC_LOCK ] && exit 1
-touch "$SYNC_LOCK"
-# End of non-editable lines
+# Mon Oct 26 2015: Using shlock to lock on pid
+if shlock -f $SYNC_LOCK -p $$; then
 
-# Create the log file and insert a timestamp
-touch "$SYNC_LOGS/$LOG_FILE"
-echo "=============================================" >> "$SYNC_LOGS/$LOG_FILE"
-echo ">> Starting sync on $(date --rfc-3339=seconds)" >> "$SYNC_LOGS/$LOG_FILE"
-echo ">> ---" >> "$SYNC_LOGS/$LOG_FILE"
-
-if [ -z $SYNC_REPO ]; then
-  # Sync a complete mirror
-  # old --max-delete flag set to 1000
-  rsync -rtlvH --delete-after --delay-updates --safe-links $SYNC_SERVER "$SYNC_FILES" >> "$SYNC_LOGS/$LOG_FILE"
-  exitcode=$?
-  # Create $repo.lastsync file with timestamp like "2007-05-02 03:41:08+03:00"
-  # which may be useful for users to know when the mirror was last updated
-  date --rfc-3339=seconds > "$SYNC_FILES/$repo.lastsync"
+	# Create the log file and insert a timestamp
+	touch "$SYNC_LOGS/$LOG_FILE"
+	echo "=============================================" >> "$SYNC_LOGS/$LOG_FILE"
+	echo ">> Starting sync on $(date --rfc-3339=seconds)" >> "$SYNC_LOGS/$LOG_FILE"
+	echo ">> ---" >> "$SYNC_LOGS/$LOG_FILE"
+	
+	if [ -z $SYNC_REPO ]; then
+	  # Sync a complete mirror
+	  # old --max-delete flag set to 1000
+	  rsync -rtlvH --delete-after --delay-updates --safe-links $SYNC_SERVER "$SYNC_FILES" >> "$SYNC_LOGS/$LOG_FILE"
+	  exitcode=$?
+	  # Create $repo.lastsync file with timestamp like "2007-05-02 03:41:08+03:00"
+	  # which may be useful for users to know when the mirror was last updated
+	  date --rfc-3339=seconds > "$SYNC_FILES/$repo.lastsync"
+	else
+	  # Sync each of the repositories set in $SYNC_REPO
+	  for repo in ${SYNC_REPO[@]}; do
+	    repo=$(echo $repo | tr [:upper:] [:lower:])
+	    echo ">> Syncing $repo to $SYNC_FILES/$repo" >> "$SYNC_LOGS/$LOG_FILE"
+	
+	    # If you only want to mirror i686 packages, you can add
+	    # " --exclude=os/x86_64" after "--delete-after"
+	    # 
+	    # If you only want to mirror x86_64 packages, use "--exclude=os/i686"
+	    # If you want both i686 and x86_64, leave the following line as it is
+	    #
+	    rsync -rtlvH --delete-after --delay-updates --max-delete=1000 $SYNC_SERVER/$repo "$SYNC_FILES" >> "$SYNC_LOGS/$LOG_FILE"
+	
+	    # Create $repo.lastsync file with timestamp like "2007-05-02 03:41:08+03:00"
+	    # which may be useful for users to know when the repository was last updated
+	    date --rfc-3339=seconds > "$SYNC_FILES/$repo.lastsync"
+	
+	    # Sleep 5 seconds after each repository to avoid too many concurrent connections
+	    # to rsync server if the TCP connection does not close in a timely manner
+	    sleep 5 
+	  done
+	fi
+	
+	# Mon Aug 5 2013: Added a space after `[`
+	if [ "$exitcode" -ne 0 ]
+	then
+		#if our rsync failed, log it and email us 
+	
+		logger -p cron.err -t $0 `tail -n 5 $SYNC_LOGS/$LOG_FILE` #write log to syslog on failure
+		OUTOFDATE=`find /limbus/centos/status -mtime -1 -name 'ARCHLINUX*' | wc -l`
+		   if [ "$OUTOFDATE" -eq 0 ]
+	   	then
+	   		echo "Warning: Archlinux mirror out of date by 24 hours, please check logs at http://centos.rutgers.edu/mirror/status " | mail -s "ARCHLINUX MIRROR 24 Hours out of date" $EMAIL
+	   	fi
+	
+	fi
+	
+	#update the status file for rutgers oss
+	echo $DATENICE > $UPDATE_FILE
+	
+	#get most recently updated repo file
+	LATEST_REPO_FILE=`ls -tr $SYNC_HOME/core/os/i686/core.db.tar.gz $SYNC_HOME/core/os/x86_64/core.db.tar.gz   $SYNC_HOME/extra/os/i686/extra.db.tar.gz    $SYNC_HOME/extra/os/x86_64/extra.db.tar.gz $SYNC_HOME/community/os/i686/community.db.tar.gz   $SYNC_HOME/community/os/x86_64/community.db.tar.gz  | tail -n 1`
+	
+	REPODATA_DIR_DATE=`date -r $LATEST_REPO_FILE \`\`+%a\ -\ %b\ %d,\ %Y\ -\ %H:%M''`
+	
+	echo $REPODATA_DIR_DATE >> $UPDATE_FILE
+	
+	
+	
+	# Insert another timestamp and close the log file
+	echo ">> ---" >> "$SYNC_LOGS/$LOG_FILE"
+	echo ">> Finished sync on $(date --rfc-3339=seconds)" >> "$SYNC_LOGS/$LOG_FILE"
+	echo "=============================================" >> "$SYNC_LOGS/$LOG_FILE"
+	echo "" >> "$SYNC_LOGS/$LOG_FILE"
+	
+	# Remove the lock file and exit
+	rm -f "$SYNC_LOCK"
+	exit 0
 else
-  # Sync each of the repositories set in $SYNC_REPO
-  for repo in ${SYNC_REPO[@]}; do
-    repo=$(echo $repo | tr [:upper:] [:lower:])
-    echo ">> Syncing $repo to $SYNC_FILES/$repo" >> "$SYNC_LOGS/$LOG_FILE"
-
-    # If you only want to mirror i686 packages, you can add
-    # " --exclude=os/x86_64" after "--delete-after"
-    # 
-    # If you only want to mirror x86_64 packages, use "--exclude=os/i686"
-    # If you want both i686 and x86_64, leave the following line as it is
-    #
-    rsync -rtlvH --delete-after --delay-updates --max-delete=1000 $SYNC_SERVER/$repo "$SYNC_FILES" >> "$SYNC_LOGS/$LOG_FILE"
-
-    # Create $repo.lastsync file with timestamp like "2007-05-02 03:41:08+03:00"
-    # which may be useful for users to know when the repository was last updated
-    date --rfc-3339=seconds > "$SYNC_FILES/$repo.lastsync"
-
-    # Sleep 5 seconds after each repository to avoid too many concurrent connections
-    # to rsync server if the TCP connection does not close in a timely manner
-    sleep 5 
-  done
+	echo "Lock $SYNC_LOCK already held by `cat $SYNC_LOCK`" >&2
+	exit 1
 fi
-
-# Mon Aug 5 2013: Added a space after `[`
-if [ "$exitcode" -ne 0 ]
-then
-	#if our rsync failed, log it and email us 
-
-	logger -p cron.err -t $0 `tail -n 5 $SYNC_LOGS/$LOG_FILE` #write log to syslog on failure
-	OUTOFDATE=`find /mirror/status -mtime -1 -name 'ARCHLINUX*' | wc -l`
-	   if [ "$OUTOFDATE" -eq 0 ]
-   	then
-   		echo "Warning: Archlinux mirror out of date by 24 hours, please check logs at http://centos.rutgers.edu/mirror/status " | mail -s "ARCHLINUX MIRROR 24 Hours out of date" $EMAIL
-   	fi
-
-fi
-
-#update the status file for rutgers oss
-echo $DATENICE > $UPDATE_FILE
-
-#get most recently updated repo file
-LATEST_REPO_FILE=`ls -tr $SYNC_HOME/core/os/i686/core.db.tar.gz $SYNC_HOME/core/os/x86_64/core.db.tar.gz   $SYNC_HOME/extra/os/i686/extra.db.tar.gz    $SYNC_HOME/extra/os/x86_64/extra.db.tar.gz $SYNC_HOME/community/os/i686/community.db.tar.gz   $SYNC_HOME/community/os/x86_64/community.db.tar.gz  | tail -n 1`
-
-REPODATA_DIR_DATE=`date -r $LATEST_REPO_FILE \`\`+%a\ -\ %b\ %d,\ %Y\ -\ %H:%M''`
-
-echo $REPODATA_DIR_DATE >> $UPDATE_FILE
-
-
-
-# Insert another timestamp and close the log file
-echo ">> ---" >> "$SYNC_LOGS/$LOG_FILE"
-echo ">> Finished sync on $(date --rfc-3339=seconds)" >> "$SYNC_LOGS/$LOG_FILE"
-echo "=============================================" >> "$SYNC_LOGS/$LOG_FILE"
-echo "" >> "$SYNC_LOGS/$LOG_FILE"
-
-# Remove the lock file and exit
-rm -f "$SYNC_LOCK"
-exit 0
 

@@ -7,7 +7,8 @@ RSYNC_COMMAND="rsync --recursive --times --links --hard-links --delete -v --prog
 CURRENT_RELEASE=`rsync --no-motd $RSYNC_REMOTE_DIR 2> /dev/null | awk '{ print $5 }' | egrep -o "^[0-9]+" | sort -gr | head -n1`
 NO_OF_RELEASES_TO_KEEP=2
 INCLUDE_LIST="--include *x86_64*.iso --include *i386*.iso"
-EXCLUDE_LIST="--exclude 6.2 --exclude debuginfo --exclude *.iso"
+#EXCLUDE_LIST="--exclude 6.2 --exclude debuginfo --exclude *.iso"
+EXCLUDE_LIST="--exclude debuginfo --exclude *.iso"
 
 # Exclude all older versions of CentOS
 LAST_RELEASE=`expr $CURRENT_RELEASE - $NO_OF_RELEASES_TO_KEEP`

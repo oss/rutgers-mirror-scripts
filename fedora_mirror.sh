@@ -25,7 +25,8 @@ exitcode=$?
 if [ "$exitcode" -eq 0 ] 	# exit status OK
 then
     echo $DATENICE > $P_DIR/$P_DATEFILE
-    REPODATA_DIR=$(ls -td $(find $R_DIR -maxdepth 5 -name repodata -type d) |awk "NR==1")
+    #REPODATA_DIR=$(ls -td $(find $R_DIR -maxdepth 5 -name repodata -type d) |awk "NR==1")
+    REPODATA_DIR=`ls -td $(find $R_DIR -maxdepth 5 -name repodata -type d) |awk "NR==1"` # changed to backticks 2/28. hcstern
     REPODATA_DIR_DATE=`date -r $REPODATA_DIR \`\`+%a\ -\ %b\ %d,\ %Y\ -\ %H:%M''`
     echo $REPODATA_DIR_DATE >> $P_DIR/$P_DATEFILE
     mv $T_LOG $P_LOG

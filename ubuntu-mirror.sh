@@ -12,8 +12,8 @@ UPDATE_FILE=/limbus/centos/status/UBUNTU.LAST_UPDATE
 EMAIL="oss@oss.rutgers.edu"
 ## Setup the server to mirror
 #remote=rsync://archive.ubuntu.com/ubuntu
-remote=rsync://mirrors.rit.edu/ubuntu
-
+#remote=rsync://mirrors.rit.edu/ubuntu
+remote=rsync://us.archive.ubuntu.com/ubuntu
 
 ## Setup the local directory / Our mirror
 local=$SYNC_HOME
@@ -45,11 +45,11 @@ while [[ "$complete" != "true" ]]; do
 
 		logger -p cron.err -t $0 `tail -n 5 $log` #write log to syslog on failure
 		# Mon Aug 5 2013: This used to search for "ARCHLINUX" instead of "UBUNTU"
-		OUTOFDATE=`find /mirror/status -mtime -1 -name 'UBUNTU*' | wc -l`
+		OUTOFDATE=`find /limbus/centos/status -mtime -1 -name 'UBUNTU*' | wc -l`
 		if [ "$OUTOFDATE" -eq 0 ]
 		then
 			echo "sync out of date\n";
-		#	echo "Warning: Ubuntu mirror out of date by 24 hours, please check logs at http://centos.rutgers.edu/mirror/status " | mail -s "UBUNTU MIRROR 24 Hours out of date" $EMAIL
+			echo "Warning: Ubuntu mirror out of date by 24 hours, please check logs at http://centos.rutgers.edu/mirror/status " | mail -s "UBUNTU MIRROR 24 Hours out of date" $EMAIL
 		fi
 
         else
